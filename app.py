@@ -1,147 +1,82 @@
-# app.py
 import streamlit as st
-import os
-import json
-from datetime import datetime, date
-
-DATA_FILE = 'data.json'
-UPLOAD_DIR = 'uploads'
-
-REQUIRED_DOCS = [
-    'Signed Contract',
-    'Registration Form',
-    'LC Application / Undertaking Letter',
-    'Commercial Invoice',
-    'Packing List',
-    'Bill of Lading',
-    'Phytosanitary Certificate',
-    'Fumigation Certificate',
-    'Quality Certificate',
-    'Weight Certificate',
-    'ICO Certificate',
-    'COO Certificate',
-    'Beneficiary’s Certificate',
-    'Submission Form',
-    'Cover Letter',
-    'Bank Permit',
-    'Transit Agreement',
-    'Bank Advice'
-]
-
-PAYMENT_TERMS = ['LC', 'CAD', 'TT']
-
-def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, 'r') as f:
-            return json.load(f)
-    return []
-
-def save_data(data):
-    with open(DATA_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
-
-def make_folder(path):
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-def upload_doc(shipment_id, doc_type):
-    file = st.file_uploader(f"Upload {doc_type}", type=['pdf', 'jpg', 'png'], key=f"{shipment_id}_{doc_type}")
-    if file:
-        path = os.path.join(UPLOAD_DIR, shipment_id)
-        make_folder(path)
-        ext = file.name.split('.')[-1]
-        file_path = os.path.join(path, f"{doc_type.replace(' ', '_')}.{ext}")
-        with open(file_path, 'wb') as f:
-            f.write(file.getbuffer())
-        st.success(f"{doc_type} uploaded.")
-
-def check_uploaded(shipment_id):
-    path = os.path.join(UPLOAD_DIR, shipment_id)
-    uploaded = []
-    if os.path.exists(path):
-        uploaded = [f.split('.')[0].replace('_', ' ') for f in os.listdir(path)]
-    return uploaded
-
-def validate_shipment_input(shipment_id, buyer, contract_date, etd, payment_term):
-    errors = []
-    today = date.today()
-    if not shipment_id.strip():
-        errors.append("Shipment ID cannot be empty.")
-    if not buyer.strip():
-        errors.append("Buyer name cannot be empty.")
-    if contract_date > today:
-        errors.append("Contract date cannot be in the future.")
-    if etd < today:
-        errors.append("ETD must be today or a future date.")
-    if contract_date > etd:
-        errors.append("Contract date cannot be after ETD.")
-    if payment_term not in PAYMENT_TERMS:
-        errors.append("Payment term must be one of LC, CAD, or TT.")
-    return errors
+import pandas as pd
+import datetime
 
 st.set_page_config(page_title="Coffee Export Tracker", layout="wide")
-st.title("📦 Coffee Export Documentation Tracker with Validation")
+st.title("☕ Coffee Export Documentation Tracker")
 
-menu = ["Add Shipment", "View Shipments"]
-choice = st.sidebar.selectbox("Menu", menu)
+st.markdown("---")
 
-all_data = load_data()
+# Initialize session state if not set
+if "records" not in st.session_state:
+    st.session_state.records = []
 
-if choice == "Add Shipment":
-    st.subheader("➕ Add New Shipment")
-    with st.form(key='add_form'):
+with st.form("shipment_form", clear_on_submit=True):
+    st.subheader("📦 New Shipment Entry")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
         shipment_id = st.text_input("Shipment ID")
-        buyer = st.text_input("Buyer Name")
+        etd = st.date_input("ETD (Estimated Time of Departure)", datetime.date.today())
         contract_date = st.date_input("Contract Date")
-        etd = st.date_input("Estimated Time of Departure (ETD)")
-        payment_term = st.selectbox("Payment Term", PAYMENT_TERMS)
-        submitted = st.form_submit_button("Save Shipment")
+    with col2:
+        buyer_name = st.text_input("Buyer Name")
+        payment_term = st.selectbox("Payment Term", ["LC", "CAD", "TT"])
+        price_approved = st.radio("Price Above Minimum?", ["Yes", "No"])
+    with col3:
+        status = st.selectbox("Shipment Status", ["Pending", "In Progress", "Completed"])
+        remarks = st.text_area("Remarks")
 
-        if submitted:
-            errors = validate_shipment_input(shipment_id, buyer, contract_date, etd, payment_term)
-            if errors:
-                for err in errors:
-                    st.error(err)
-            else:
-                shipment = {
-                    "shipment_id": shipment_id.strip(),
-                    "buyer": buyer.strip(),
-                    "contract_date": contract_date.strftime('%Y-%m-%d'),
-                    "etd": etd.strftime('%Y-%m-%d'),
-                    "payment_term": payment_term,
-                    "created_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                }
-                all_data.append(shipment)
-                save_data(all_data)
-                st.success("Shipment added successfully.")
+    st.markdown("### 📄 Upload Required Documents")
 
-elif choice == "View Shipments":
-    st.subheader("📄 Shipment List")
-    if not all_data:
-        st.info("No shipments yet.")
-    else:
-        for shipment in all_data:
-            with st.expander(f"🚢 {shipment['shipment_id']} - {shipment['buyer']}"):
-                st.write(f"**Contract Date:** {shipment['contract_date']}")
-                st.write(f"**ETD:** {shipment['etd']}")
-                st.write(f"**Payment Term:** {shipment.get('payment_term', 'N/A')}")
+    docs = {
+        "Signed Contract": st.file_uploader("Signed Contract"),
+        "Registration Form (Amharic)": st.file_uploader("Registration Form"),
+        "LC/Undertaking Letter": st.file_uploader("LC Copy / Undertaking Letter"),
+        "Commercial Invoice": st.file_uploader("Commercial Invoice"),
+        "Permit": st.file_uploader("Permit from NBE"),
+        "Cleaning Certificate": st.file_uploader("Cleaning Certificate"),
+        "Company Certificate": st.file_uploader("Company Certificate"),
+        "Booking Confirmation": st.file_uploader("Booking Confirmation"),
+        "Packing List": st.file_uploader("Packing List"),
+        "Waybill": st.file_uploader("Waybill"),
+        "Quality Certificate": st.file_uploader("Quality Certificate"),
+        "VGM": st.file_uploader("VGM Document"),
+        "T1 Document": st.file_uploader("T1 Document"),
+        "EX1 / EX8": st.file_uploader("EX1 / EX8"),
+        "Bill of Lading": st.file_uploader("Bill of Lading"),
+        "Phytosanitary Certificate": st.file_uploader("Phytosanitary Certificate"),
+        "Fumigation Certificate": st.file_uploader("Fumigation Certificate"),
+        "ICO Certificate": st.file_uploader("ICO Certificate"),
+        "Weight Certificate": st.file_uploader("Weight Certificate"),
+        "COO Certificate": st.file_uploader("COO / Annex III / DFT/SPTT"),
+        "Submission Form": st.file_uploader("Submission Form"),
+        "Settlement Advice": st.file_uploader("Settlement Advice")
+    }
 
-                uploaded = check_uploaded(shipment['shipment_id'])
-                missing_docs = []
+    submitted = st.form_submit_button("Save Entry")
+    if submitted:
+        st.session_state.records.append({
+            "Shipment ID": shipment_id,
+            "Buyer": buyer_name,
+            "ETD": etd,
+            "Contract Date": contract_date,
+            "Payment Term": payment_term,
+            "Price Approved": price_approved,
+            "Status": status,
+            "Remarks": remarks,
+            "Docs Uploaded": [k for k, v in docs.items() if v is not None]
+        })
+        st.success("Shipment record saved.")
 
-                for doc in REQUIRED_DOCS:
-                    col1, col2 = st.columns([3,1])
-                    with col1:
-                        upload_doc(shipment['shipment_id'], doc)
-                    with col2:
-                        if doc in uploaded:
-                            st.success("Uploaded")
-                        else:
-                            st.error("Missing")
-                            missing_docs.append(doc)
+st.markdown("---")
 
-                if missing_docs:
-                    st.warning(f"🚨 Missing documents: {', '.join(missing_docs)}")
-                else:
-                    st.success("✅ All required documents uploaded.")
+st.subheader("📊 Tracked Shipments")
+
+if st.session_state.records:
+    df = pd.DataFrame(st.session_state.records)
+    st.dataframe(df)
+else:
+    st.info("No shipments tracked yet. Use the form above to add one.")
+
 
